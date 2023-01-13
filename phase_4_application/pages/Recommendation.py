@@ -1,4 +1,5 @@
-# import streamlit as st
+
+import streamlit as st
 
 # Thư viện thao tác trên tập dữ liệu
 import pandas as pd
@@ -8,54 +9,29 @@ from datetime import time, datetime
 from sklearn.cluster import KMeans
 from sklearn import metrics
 import matplotlib.pyplot as plt
+from datetime import datetime
 
 # Thư viện trực quan plotly
 import plotly.express as px
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+st.set_option('deprecation.showPyplotGlobalUse', False)
+# ---------------------- FRAME 1 -----------------------
+df_titles = st.session_state.df_titles
+df_credits = st.session_state.df_credits
 
-# Lấy và làm sạch dữ liệu
-def loadDataCredits():
-    df_netflix_credits = pd.read_csv('../../data/netflix/credits.csv')
-    df_amazon_credits = pd.read_csv('../../data/amazon/credits.csv')
-    df_hbo_credits = pd.read_csv('../../data/hbo/credits.csv')
+st.header("🎞️:green[TRANG KHUYẾN NGHỊ PHIM]")
+st.sidebar.markdown("# 🎞️:red[TRANG KHUYẾN NGHỊ PHIM]")
 
-    df_credits_raw = pd.concat([df_amazon_credits, df_hbo_credits, df_netflix_credits], axis=0)
+caption = "Giao diện mô tả thuật toán khuyến nghị phim cho người dùng bằng cách sử dụng phương pháp gom cụm K-Means:"
+st.caption(caption, unsafe_allow_html = False)
 
-    df_credits = df_credits_raw.drop_duplicates()
-    df_credits.drop('person_id', inplace=True, axis=1, errors='ignore')
-    df_credits['character'] = df_credits['character'].fillna('None')
+st.markdown("### 1. Hướng dẫn sử dụng:")
+caption = "Hệ thống khuyến nghị hoạt động dựa trên việc gom cụm dữ liệu sao cho ứng với các thuộc tính tính chất (type - show hay movie), năm phát hành (release year), phân loại tuổi (age certification), quốc gia sản xuất chính (main production countries) và thể loại phim."
+st.write(caption)
 
-    return df_credits
-
-def loadDataTitles():
-    df_amazon_titles = pd.read_csv('../../data/amazon/titles.csv')
-    df_hbo_titles = pd.read_csv('../../data/hbo/titles.csv')
-    df_netflix_titles = pd.read_csv('../../data/netflix/titles.csv')
-    df_titles_raw = pd.concat([df_amazon_titles, df_hbo_titles, df_netflix_titles], axis=0)
-    df_titles = df_titles_raw.drop_duplicates()
-
-    df_titles['release_year'] = pd.to_datetime(df_titles['release_year'], format="%Y").dt.year
-
-    df_titles.drop('description', inplace=True, axis=1)
-
-    df_titles['age_certification'].fillna('NONE', inplace=True)
-
-    df_titles['production_countries'] = df_titles['production_countries'].str.replace('[', '', regex=True)\
-                                    .str.replace("'", '', regex=True)\
-                                    .str.replace(']', '', regex=True)
-
-    df_titles['main_production_countries'] = df_titles['production_countries'].str.split(',').str[0]
-
-    df_titles['genres'] = df_titles['genres'].str.replace('[', '', regex=True)\
-                                        .str.replace("'", '', regex=True)\
-                                        .str.replace(']', '', regex=True)
-                                        
-    df_titles['main_genre'] = df_titles['genres'].str.split(', ').str[0]
-    df_titles['seasons'] = df_titles['seasons'].fillna(0) 
-
-    return df_titles
-
-df_titles, df_credits = loadDataTitles(), loadDataCredits()
-
+st.markdown("#### 2. Bước 1: Vòng lặp chọn n (số lượng cụm hợp lý) nhất cho mô hình.")
+caption = "Đầu tiên, ta thực hiện chọn khoảng cụm n để cho ra cụm có kết quả tốt nhất. Sau khi thực hiện xong, một biểu đồ thể hiện chỉ số inertia (chỉ số tổng bình phương khoảng cách giữa các điểm đến centroid của nó). Sau khi xem biểu đồ, ta có thể chọn được số cụm n phù hợp cho mô hình."
 recommend_df = df_titles[['type', 'release_year', 'age_certification', 'main_production_countries', 'main_genre']]
 
 genres_dict = {g: 0 for g in recommend_df['main_genre'].unique()}
@@ -78,75 +54,96 @@ for i,_ in countries_dict.items():
     age_dict[i] = idx
     idx += 1
 
-# print(genres_dict)
-# print(countries_dict)
-
 recommend_df['main_genre'] = recommend_df['main_genre'].map(genres_dict)
 recommend_df['main_production_countries'] = recommend_df['main_production_countries'].map(countries_dict)
 recommend_df['age_certification'] = recommend_df['age_certification'].map(age_dict)
 recommend_df['type'] = recommend_df['type'].map(type_dict)
 recommend_np = recommend_df.to_numpy()
 
-# print(recommend_df)
-
 sum_distances = []
-start = int(input('Start cluster: '))
-end = int(input('End cluster: '))
-K = range(start, end)
+
+# Range values 
+values_range_kmean = st.slider(
+    'Chọn khoảng giá trị cần xem xét khoảng k-n',
+    1, 14, (1, 14))
+st.write('Values:', values_range_kmean)
+
+K = range(values_range_kmean[0], values_range_kmean[1])
+
 for k in K:
   k_mean = KMeans(n_clusters=k)
   k_mean.fit(recommend_np)
   sum_distances.append(k_mean.inertia_)
 
-plt.plot(K, sum_distances, 'bx-')
-plt.show()
+# plt.plot(K, sum_distances, 'bx-') 
+# plt.show() 
 
-n = int(input('Choose cluster: '))
+fig1 = px.line(K, sum_distances, markers=True)
+fig1 = fig1.update_layout(xaxis_title='Inerita', yaxis_title='Số cụm')
+st.plotly_chart(fig1, theme=None, use_container_width=True)
 
-k_mean = KMeans(n_clusters=n)
-model = k_mean.fit(recommend_np)
-result = k_mean.labels_
+# ------ CHỌN CỤM
+st.markdown("#### 3. Bước 2: Chọn số n tốt từ bước 1")
+n_cluster_choice = st.text_input('Nhập vào cụm n tốt nhất')
 
-print('Silhouette_score', metrics.silhouette_score(recommend_np, result, metric='euclidean'))
+if n_cluster_choice == '':
+    pass
+else:
+    n_cluster_choice = int(n_cluster_choice)
+    k_mean = KMeans(n_clusters = n_cluster_choice)
+    model = k_mean.fit(recommend_np)
+    result = k_mean.labels_
 
-marker = ['x', 'o', 'v', '+', '.', '^', '<', '>']
-color = ['lightgreen', 'orange', 'lightblue', 'pink', 'indigo', 'cyan', 'blue', 'green']
+    marker = ['x', 'o', 'v', '+', '.', '^', '<', '>']
+    color = ['lightgreen', 'orange', 'lightblue', 'pink', 'indigo', 'cyan', 'blue', 'green']
 
-for i in range(n):
+    fig2 = plt.figure()
+    for i in range(n_cluster_choice):
+        plt.scatter(
+            recommend_np[result == i, 1], recommend_np[result == i, -2],
+            c=color[i],
+            marker=marker[i], edgecolor='black',
+            label='cluster ' + str(i+1)
+        )
+
     plt.scatter(
-        recommend_np[result == i, 1], recommend_np[result == i, -2],
-        c=color[i],
-        marker=marker[i], edgecolor='black',
-        label='cluster ' + str(i+1)
+        model.cluster_centers_[:, 1], model.cluster_centers_[:, -2],
+        s=250, marker='*',
+        c='red', edgecolor='black',
+        label='centroids'
     )
 
-plt.scatter(
-    model.cluster_centers_[:, 1], model.cluster_centers_[:, -2],
-    s=250, marker='*',
-    c='red', edgecolor='black',
-    label='centroids'
-)
+    plt.legend(scatterpoints=1)
+    fig2 = plt.grid()
+    st.pyplot(fig2)
 
-plt.legend(scatterpoints=1)
-plt.grid()
-plt.show()
+    df_titles['cluster'] = result
 
-df_titles['cluster'] = result
+    def recommend(model, movie_type, release_year, age_certi, country, genre):
+        arr = np.array([[movie_type, release_year, age_certi, country, genre]])
+        pred = model.predict(arr)
+        return df_titles[df_titles['cluster'] == pred[0]].sample(5)
 
-def recommend(model, movie_type, release_year, age_certi, country, genre):
-  arr = np.array([[movie_type, release_year, age_certi, country, genre]])
-  pred = model.predict(arr)
-  return df_titles[df_titles['cluster'] == pred[0]].sample(5)
+    type_choice = st.selectbox(
+        'Bạn thích phim (MOVIE) hay truyền hình (SHOW)',
+        ('MOVIE', 'SHOW'))
 
-movie_type = input('MOVIE or SHOW: ')
-release_year = int(input('Choose year: '))
-age_certi = input('[TV-PG, NONE, PG, G, PG-13, R, TV-G, TV-Y, TV-14, NC-17, TV-Y7, TV-MA]\nChoose age certification: ')
-country = input('Choose production country (e.g US, CA, ...): ')
-genre = input('Choose genre (e.g comedy, action, romance, thriller, ...): ')
+    age_choice = st.selectbox(
+        'Nhãn phân loại phim mà bạn quan tâm',
+        ('TV-PG', 'NONE', 'PG', 'G', 'PG-13', 'R', 'TV-G', 'TV-Y', 'TV-14', 'NC-17', 'TV-Y7', 'TV-MA'))
 
-movie_type = type_dict[movie_type.upper()]
-age_certi = age_dict[age_certi]
-country = countries_dict[country]
-genre = genres_dict[genre.lower()]
+    country_text = st.text_input('Chọn nơi sản xuất phim:')
+    genre_choice = st.text_input('Chọn thể loại phim')
+    release_year_choice = st.text_input('Chọn năm sản xuất')
 
-print('Recommended movies:\n',recommend(model, movie_type, release_year, age_certi, country, genre))
+    if len(country_text) == 0 or len(release_year_choice) == 0 or len(genre_choice) == 0:
+        pass
+    else:
+        type_choice = type_dict[type_choice.upper()]
+        age_choice = age_dict[age_choice]
+        country_text = countries_dict[country_text]
+        genre_choice = genres_dict[genre_choice.lower()]
+
+        st.markdown("##### Những bộ phim bạn nên xem dựa trên lựa chọn của bạn: ")
+        result = recommend(model, type_choice, release_year_choice, age_choice, country_text, genre_choice)
+        st.dataframe(result, use_container_width=True)
