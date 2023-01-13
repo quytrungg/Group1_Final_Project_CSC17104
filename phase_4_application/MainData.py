@@ -12,6 +12,16 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 
+st.set_page_config(
+    page_title="MainData",
+    page_icon='📊',
+)
+
+# Share tiến trình
+if "df_credits" or "df_titles" not in st.sesstion_state:
+    st.session_state.df_credits = None
+    st.session_state.df_titles = None
+
 # Lấy và làm sạch dữ liệu
 def loadDataCredits():
     df_netflix_credits = pd.read_csv('../data/netflix/credits.csv')
@@ -226,3 +236,5 @@ else:
     st.dataframe(top_frame, use_container_width=True)
 
 
+st.session_state.df_credits = df_credits
+st.session_state.df_titles = df_titles
